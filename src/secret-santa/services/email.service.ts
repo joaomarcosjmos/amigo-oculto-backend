@@ -2,25 +2,45 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import { Transporter } from 'nodemailer';
+import { Resend } from 'resend';
 
 @Injectable()
 export class EmailService implements OnModuleInit {
   private readonly logger = new Logger(EmailService.name);
-  private transporter: Transporter;
+  private transporter: Transporter | null = null;
+  private resend: Resend | null = null;
+  private useResend: boolean = false;
 
   constructor(private readonly configService: ConfigService) {}
 
   onModuleInit() {
-    this.initializeTransporter();
+    this.initializeEmailProvider();
   }
 
   /**
-   * Inicializa o transporter do nodemailer
+   * Inicializa o provedor de email (Resend ou SMTP)
    */
-  private initializeTransporter(): void {
+  private initializeEmailProvider(): void {
+    const resendApiKey = this.configService.get<string>('RESEND_API_KEY');
+    
+    if (resendApiKey) {
+      // Usa Resend se a API key estiver configurada
+      this.resend = new Resend(resendApiKey);
+      this.useResend = true;
+      this.logger.log('EmailService inicializado com Resend');
+      return;
+    }
+
+    // Fallback para SMTP
+    this.initializeSMTP();
+  }
+
+  /**
+   * Inicializa o transporter SMTP (fallback)
+   */
+  private initializeSMTP(): void {
     const host = this.configService.get<string>('SMTP_HOST', 'smtp.gmail.com');
     const port = this.configService.get<number>('SMTP_PORT', 587);
-    const secure = this.configService.get<boolean>('SMTP_SECURE', false);
     const user = this.configService.get<string>('SMTP_USER');
     const pass = this.configService.get<string>('SMTP_PASS');
 
@@ -30,41 +50,123 @@ export class EmailService implements OnModuleInit {
       );
     }
 
-    this.transporter = nodemailer.createTransport({
+    const transportOptions: any = {
       host,
       port,
-      secure: false, // Use false para port 587
-      requireTLS: true, // Força uso de TLS
+      secure: port === 465, // true para 465, false para outros
       auth: {
         user,
         pass,
       },
       tls: {
-        rejectUnauthorized: false, // Para desenvolvimento
-        ciphers: 'SSLv3',
+        rejectUnauthorized: false, // Para desenvolvimento/produção com certificados auto-assinados
+        minVersion: 'TLSv1.2', // Versão mínima de TLS
       },
-      connectionTimeout: 30000, // 30 segundos
-      greetingTimeout: 30000, // 30 segundos
-      socketTimeout: 30000, // 30 segundos
-      pool: true, // Usa connection pooling
-      maxConnections: 5,
-      maxMessages: 100,
-      rateDelta: 1000,
-      rateLimit: 5,
-    });
+      // Timeouts ajustados para plano gratuito do Render (limitações de rede)
+      connectionTimeout: 20000, // 20 segundos (reduzido para plano gratuito)
+      greetingTimeout: 15000, // 15 segundos
+      socketTimeout: 20000, // 20 segundos
+    };
 
-    this.logger.log('Transporter de email inicializado');
+    if (port === 587) {
+      transportOptions.requireTLS = true; // Força TLS apenas na porta 587
+    }
+
+    this.transporter = nodemailer.createTransport(transportOptions);
+    this.logger.log('EmailService inicializado com SMTP (Nodemailer)');
   }
 
   /**
    * Envia email com o resultado do amigo oculto
    * Com retry automático em caso de falha
+   * Usa Resend se configurado, caso contrário usa SMTP
    */
   async sendSecretSantaEmail(
     email: string,
     secretFriendNickname: string,
     customTemplate?: string,
   ): Promise<void> {
+    if (this.useResend && this.resend) {
+      return this.sendWithResend(email, secretFriendNickname, customTemplate);
+    }
+
+    return this.sendWithSMTP(email, secretFriendNickname, customTemplate);
+  }
+
+  /**
+   * Envia email usando Resend
+   */
+  private async sendWithResend(
+    email: string,
+    secretFriendNickname: string,
+    customTemplate?: string,
+  ): Promise<void> {
+    const fromEmail = this.configService.get<string>(
+      'RESEND_FROM_EMAIL',
+      this.configService.get<string>('SMTP_FROM', 'noreply@example.com'),
+    );
+    const fromName = this.configService.get<string>('SMTP_FROM_NAME', 'Amigo Oculto');
+
+    const htmlContent = customTemplate
+      ? this.processCustomTemplate(customTemplate, secretFriendNickname)
+      : this.generateEmailTemplate(secretFriendNickname);
+    
+    const textContent = customTemplate
+      ? this.processCustomTemplate(customTemplate, secretFriendNickname, true)
+      : this.generateEmailText(secretFriendNickname);
+
+    const maxRetries = 3;
+    let lastError: Error;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        this.logger.log(`[Resend] Tentativa ${attempt}/${maxRetries} de envio de email para ${email}`);
+        
+        const { data, error } = await this.resend!.emails.send({
+          from: `${fromName} <${fromEmail}>`,
+          to: email,
+          subject: '🎁 Seu Amigo Oculto foi sorteado!',
+          html: htmlContent,
+          text: textContent,
+        });
+
+        if (error) {
+          throw new Error(error.message || 'Erro ao enviar email via Resend');
+        }
+
+        this.logger.log(`[Resend] Email enviado com sucesso para ${email}. ID: ${data?.id}`);
+        return;
+      } catch (error: any) {
+        lastError = error;
+        const errorMessage = error.message || 'Erro desconhecido';
+        this.logger.warn(
+          `[Resend] Tentativa ${attempt}/${maxRetries} falhou para ${email}: ${errorMessage}`,
+        );
+        
+        if (attempt < maxRetries) {
+          const delay = attempt * 2000; // Backoff exponencial: 2s, 4s, 6s
+          this.logger.log(`Aguardando ${delay}ms antes da próxima tentativa...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+      }
+    }
+
+    this.logger.error(`[Resend] Falha ao enviar email para ${email} após ${maxRetries} tentativas`, lastError);
+    throw new Error(`Falha ao enviar email após ${maxRetries} tentativas: ${lastError?.message}`);
+  }
+
+  /**
+   * Envia email usando SMTP (Nodemailer)
+   */
+  private async sendWithSMTP(
+    email: string,
+    secretFriendNickname: string,
+    customTemplate?: string,
+  ): Promise<void> {
+    if (!this.transporter) {
+      throw new Error('Transporter SMTP não inicializado');
+    }
+
     const fromEmail = this.configService.get<string>(
       'SMTP_FROM',
       this.configService.get<string>('SMTP_USER'),
@@ -88,20 +190,23 @@ export class EmailService implements OnModuleInit {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        this.logger.log(`Tentativa ${attempt}/${maxRetries} de envio de email para ${email}`);
+        this.logger.log(`[SMTP] Tentativa ${attempt}/${maxRetries} de envio de email para ${email}`);
+        
+        // Timeout ajustado para plano gratuito do Render (25 segundos)
         const info = await Promise.race([
           this.transporter.sendMail(mailOptions),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout após 30 segundos')), 30000),
+            setTimeout(() => reject(new Error('Timeout após 25 segundos')), 25000),
           ),
         ]);
         
-        this.logger.log(`Email enviado com sucesso para ${email}. MessageId: ${info.messageId}`);
+        this.logger.log(`[SMTP] Email enviado com sucesso para ${email}. MessageId: ${info.messageId}`);
         return;
       } catch (error: any) {
         lastError = error;
+        const errorMessage = error.message || 'Erro desconhecido';
         this.logger.warn(
-          `Tentativa ${attempt}/${maxRetries} falhou para ${email}: ${error.message}`,
+          `[SMTP] Tentativa ${attempt}/${maxRetries} falhou para ${email}: ${errorMessage}`,
         );
         
         if (attempt < maxRetries) {
@@ -112,7 +217,7 @@ export class EmailService implements OnModuleInit {
       }
     }
 
-    this.logger.error(`Falha ao enviar email para ${email} após ${maxRetries} tentativas`, lastError);
+    this.logger.error(`[SMTP] Falha ao enviar email para ${email} após ${maxRetries} tentativas`, lastError);
     throw new Error(`Falha ao enviar email após ${maxRetries} tentativas: ${lastError?.message}`);
   }
 
