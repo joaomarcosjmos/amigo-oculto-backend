@@ -49,3 +49,4 @@ frontend/.vite
 
 # Server logs
 server.log
+.server.pid
