@@ -41,7 +41,16 @@ export class EmailService implements OnModuleInit {
       },
       tls: {
         rejectUnauthorized: false, // Para desenvolvimento
+        ciphers: 'SSLv3',
       },
+      connectionTimeout: 30000, // 30 segundos
+      greetingTimeout: 30000, // 30 segundos
+      socketTimeout: 30000, // 30 segundos
+      pool: true, // Usa connection pooling
+      maxConnections: 5,
+      maxMessages: 100,
+      rateDelta: 1000,
+      rateLimit: 5,
     });
 
     this.logger.log('Transporter de email inicializado');
@@ -49,6 +58,7 @@ export class EmailService implements OnModuleInit {
 
   /**
    * Envia email com o resultado do amigo oculto
+   * Com retry automático em caso de falha
    */
   async sendSecretSantaEmail(
     email: string,
@@ -73,13 +83,37 @@ export class EmailService implements OnModuleInit {
         : this.generateEmailText(secretFriendNickname),
     };
 
-    try {
-      const info = await this.transporter.sendMail(mailOptions);
-      this.logger.log(`Email enviado com sucesso. MessageId: ${info.messageId}`);
-    } catch (error) {
-      this.logger.error(`Erro ao enviar email`, error);
-      throw new Error(`Falha ao enviar email`);
+    const maxRetries = 3;
+    let lastError: Error;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        this.logger.log(`Tentativa ${attempt}/${maxRetries} de envio de email para ${email}`);
+        const info = await Promise.race([
+          this.transporter.sendMail(mailOptions),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Timeout após 30 segundos')), 30000),
+          ),
+        ]);
+        
+        this.logger.log(`Email enviado com sucesso para ${email}. MessageId: ${info.messageId}`);
+        return;
+      } catch (error: any) {
+        lastError = error;
+        this.logger.warn(
+          `Tentativa ${attempt}/${maxRetries} falhou para ${email}: ${error.message}`,
+        );
+        
+        if (attempt < maxRetries) {
+          const delay = attempt * 2000; // Backoff exponencial: 2s, 4s, 6s
+          this.logger.log(`Aguardando ${delay}ms antes da próxima tentativa...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+      }
     }
+
+    this.logger.error(`Falha ao enviar email para ${email} após ${maxRetries} tentativas`, lastError);
+    throw new Error(`Falha ao enviar email após ${maxRetries} tentativas: ${lastError?.message}`);
   }
 
   /**

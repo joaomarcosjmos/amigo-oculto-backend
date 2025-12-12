@@ -134,25 +134,33 @@ export class SecretSantaService {
   ): Promise<Map<string, string>> {
     const assignments = await this.drawSecretSanta(participants);
 
-    // Envia emails de forma assíncrona
-    const emailPromises = Array.from(assignments.entries()).map(
-      async ([email, secretFriendNickname]) => {
-        try {
-          await this.emailService.sendSecretSantaEmail(
-            email,
-            secretFriendNickname,
-            emailTemplate,
-          );
-          // Log removido para não expor informações sensíveis
-        } catch (error) {
-          this.logger.error(`Erro ao enviar email`, error);
-          throw error;
-        }
-      },
-    );
+    // Envia emails em sequência para evitar sobrecarga e melhorar logs
+    const emailResults: Array<{ email: string; success: boolean; error?: string }> = [];
+    
+    for (const [email, secretFriendNickname] of assignments.entries()) {
+      try {
+        await this.emailService.sendSecretSantaEmail(email, secretFriendNickname, emailTemplate);
+        emailResults.push({ email, success: true });
+      } catch (error: any) {
+        const errorMessage = error?.message || 'Erro desconhecido';
+        this.logger.error(`Erro ao enviar email para ${email}: ${errorMessage}`);
+        emailResults.push({ email, success: false, error: errorMessage });
+        // Continua tentando enviar para os outros participantes
+      }
+    }
 
-    await Promise.all(emailPromises);
-    this.logger.log('Todos os emails foram enviados com sucesso');
+    const successCount = emailResults.filter(r => r.success).length;
+    const failCount = emailResults.filter(r => !r.success).length;
+
+    if (failCount > 0) {
+      this.logger.warn(
+        `Envio concluído: ${successCount} sucesso(s), ${failCount} falha(s)`,
+      );
+      // Ainda assim retorna os assignments para que o sorteio seja válido
+      // mesmo se alguns emails falharem
+    } else {
+      this.logger.log(`Todos os ${successCount} emails foram enviados com sucesso`);
+    }
 
     return assignments;
   }
