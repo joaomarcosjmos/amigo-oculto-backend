@@ -32,7 +32,13 @@ export class CreateSecretSantaDto {
   organizerEmail?: string; // Se especificado, oculta os resultados na resposta
 
   @IsOptional()
-  @IsString()
+  @Transform(({ value }) => {
+    if (value === '' || value === null || value === undefined) {
+      return undefined;
+    }
+    return value;
+  })
+  @IsString({ message: 'O template do email deve ser uma string' })
   emailTemplate?: string; // Template personalizado do email (usa {{secretFriend}} como placeholder)
 }
 
