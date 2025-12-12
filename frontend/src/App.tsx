@@ -223,7 +223,12 @@ Boa sorte e divirta-se!`);
                   type="email"
                   value={organizerEmail}
                   onChange={(e) => setOrganizerEmail(e.target.value)}
-                  onFocus={() => setActiveSection('config')}
+                  onFocus={(e) => {
+                    e.stopPropagation();
+                    if (activeSection !== 'config') {
+                      setActiveSection('config');
+                    }
+                  }}
                   placeholder="seu-email@exemplo.com"
                   className={organizerEmail && !organizerEmail.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/) ? 'input-error' : ''}
                 />
@@ -257,7 +262,12 @@ Boa sorte e divirta-se!`);
                   id="emailTemplate"
                   value={emailTemplate}
                   onChange={(e) => setEmailTemplate(e.target.value)}
-                  onFocus={() => setActiveSection('config')}
+                  onFocus={(e) => {
+                    e.stopPropagation();
+                    if (activeSection !== 'config') {
+                      setActiveSection('config');
+                    }
+                  }}
                   placeholder={`Olá!
 
 O sorteio do **Amigo Oculto** foi realizado!
@@ -346,7 +356,12 @@ Agora é só escolher o presente perfeito! 🎉`}
                             onChange={(e) =>
                               updateParticipant(index, 'nickname', e.target.value)
                             }
-                            onFocus={() => setActiveSection('participants')}
+                            onFocus={(e) => {
+                              e.stopPropagation();
+                              if (activeSection !== 'participants') {
+                                setActiveSection('participants');
+                              }
+                            }}
                             placeholder="Ex: João Grandão"
                             required
                             className={participant.nickname && !participant.nickname.trim() ? 'input-error' : ''}
@@ -365,7 +380,12 @@ Agora é só escolher o presente perfeito! 🎉`}
                             onChange={(e) =>
                               updateParticipant(index, 'email', e.target.value)
                             }
-                            onFocus={() => setActiveSection('participants')}
+                            onFocus={(e) => {
+                              e.stopPropagation();
+                              if (activeSection !== 'participants') {
+                                setActiveSection('participants');
+                              }
+                            }}
                             placeholder="email@exemplo.com"
                             required
                             className={participant.email && !emailValid ? 'input-error' : ''}
@@ -388,7 +408,12 @@ Agora é só escolher o presente perfeito! 🎉`}
                             onChange={(e) =>
                               updateParticipant(index, 'partnerEmail', e.target.value)
                             }
-                            onFocus={() => setActiveSection('participants')}
+                            onFocus={(e) => {
+                              e.stopPropagation();
+                              if (activeSection !== 'participants') {
+                                setActiveSection('participants');
+                              }
+                            }}
                             placeholder="parceiro@exemplo.com"
                           />
                         </div>
