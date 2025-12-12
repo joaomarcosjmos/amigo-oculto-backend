@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import './App.css';
 
@@ -22,7 +22,7 @@ interface ApiResponse {
 
 const API_URL = (import.meta.env.VITE_API_URL as string) || 'http://localhost:3000';
 
-// Função para formatar preview do template
+// Função para formatar preview do template - memoizada fora do componente
 const formatTemplatePreview = (template: string): string => {
   let formatted = template.replace(/\{\{secretFriend\}\}/g, '<strong style="color: #667eea;">[Nome do Amigo]</strong>');
   
@@ -68,33 +68,38 @@ Boa sorte e divirta-se!`);
   const [error, setError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<'config' | 'participants'>('config');
 
-  // Validação em tempo real
-  const getValidParticipantsCount = () => {
+  // Validação em tempo real - memoizada
+  const validParticipantsCount = useMemo(() => {
     return participants.filter(p => p.nickname.trim() && p.email.trim()).length;
-  };
+  }, [participants]);
 
-  const hasDuplicateEmails = () => {
+  const hasDuplicateEmails = useMemo(() => {
     const emails = participants.map(p => p.email.trim()).filter(e => e);
     return new Set(emails).size !== emails.length;
-  };
+  }, [participants]);
 
-  const addParticipant = () => {
-    setParticipants([...participants, { nickname: '', email: '', partnerEmail: '' }]);
-  };
+  const addParticipant = useCallback(() => {
+    setParticipants(prev => [...prev, { nickname: '', email: '', partnerEmail: '' }]);
+  }, []);
 
-  const removeParticipant = (index: number) => {
-    if (participants.length > 1) {
-      setParticipants(participants.filter((_, i) => i !== index));
-    }
-  };
+  const removeParticipant = useCallback((index: number) => {
+    setParticipants(prev => {
+      if (prev.length > 1) {
+        return prev.filter((_, i) => i !== index);
+      }
+      return prev;
+    });
+  }, []);
 
-  const updateParticipant = (index: number, field: keyof Participant, value: string) => {
-    const updated = [...participants];
-    updated[index] = { ...updated[index], [field]: value || undefined };
-    setParticipants(updated);
-  };
+  const updateParticipant = useCallback((index: number, field: keyof Participant, value: string) => {
+    setParticipants(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value || undefined };
+      return updated;
+    });
+  }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
@@ -138,15 +143,15 @@ Boa sorte e divirta-se!`);
     } finally {
       setLoading(false);
     }
-  };
+  }, [participants, organizerEmail, emailTemplate]);
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setParticipants([{ nickname: '', email: '', partnerEmail: '' }]);
     setOrganizerEmail('');
     setShowTemplateEditor(false);
     setResult(null);
     setError(null);
-  };
+  }, []);
 
   return (
     <div className="app">
@@ -193,11 +198,11 @@ Boa sorte e divirta-se!`);
           <div className="form-container">
             {/* Progress Indicator */}
             <div className="progress-steps">
-              <div className={`step ${activeSection === 'config' ? 'active' : ''} ${getValidParticipantsCount() >= 2 ? 'completed' : ''}`}>
+              <div className={`step ${activeSection === 'config' ? 'active' : ''} ${validParticipantsCount >= 2 ? 'completed' : ''}`}>
                 <div className="step-number">1</div>
                 <div className="step-label">Configuração</div>
               </div>
-              <div className={`step ${activeSection === 'participants' ? 'active' : ''} ${getValidParticipantsCount() >= 2 ? 'completed' : ''}`}>
+              <div className={`step ${activeSection === 'participants' ? 'active' : ''} ${validParticipantsCount >= 2 ? 'completed' : ''}`}>
                 <div className="step-number">2</div>
                 <div className="step-label">Participantes</div>
               </div>
@@ -223,7 +228,7 @@ Boa sorte e divirta-se!`);
                   type="email"
                   value={organizerEmail}
                   onChange={(e) => setOrganizerEmail(e.target.value)}
-                  onFocus={(e) => {
+                  onMouseDown={(e) => {
                     e.stopPropagation();
                     if (activeSection !== 'config') {
                       setActiveSection('config');
@@ -262,7 +267,7 @@ Boa sorte e divirta-se!`);
                   id="emailTemplate"
                   value={emailTemplate}
                   onChange={(e) => setEmailTemplate(e.target.value)}
-                  onFocus={(e) => {
+                  onMouseDown={(e) => {
                     e.stopPropagation();
                     if (activeSection !== 'config') {
                       setActiveSection('config');
@@ -298,18 +303,18 @@ Agora é só escolher o presente perfeito! 🎉`}
                 <span className="section-icon">👥</span>
                 <h2>Participantes</h2>
                 <div className="participant-count">
-                  {getValidParticipantsCount()} {getValidParticipantsCount() === 1 ? 'participante' : 'participantes'}
+                  {validParticipantsCount} {validParticipantsCount === 1 ? 'participante' : 'participantes'}
                 </div>
               </div>
 
-              {hasDuplicateEmails() && (
+              {hasDuplicateEmails && (
                 <div className="warning-message">
                   <span>⚠️</span>
                   <span>Existem emails duplicados. Cada participante deve ter um email único.</span>
                 </div>
               )}
 
-              {getValidParticipantsCount() < 2 && (
+              {validParticipantsCount < 2 && (
                 <div className="info-message">
                   <span>ℹ️</span>
                   <span>Adicione pelo menos 2 participantes para realizar o sorteio</span>
@@ -356,7 +361,7 @@ Agora é só escolher o presente perfeito! 🎉`}
                             onChange={(e) =>
                               updateParticipant(index, 'nickname', e.target.value)
                             }
-                            onFocus={(e) => {
+                            onMouseDown={(e) => {
                               e.stopPropagation();
                               if (activeSection !== 'participants') {
                                 setActiveSection('participants');
@@ -380,7 +385,7 @@ Agora é só escolher o presente perfeito! 🎉`}
                             onChange={(e) =>
                               updateParticipant(index, 'email', e.target.value)
                             }
-                            onFocus={(e) => {
+                            onMouseDown={(e) => {
                               e.stopPropagation();
                               if (activeSection !== 'participants') {
                                 setActiveSection('participants');
@@ -408,7 +413,7 @@ Agora é só escolher o presente perfeito! 🎉`}
                             onChange={(e) =>
                               updateParticipant(index, 'partnerEmail', e.target.value)
                             }
-                            onFocus={(e) => {
+                            onMouseDown={(e) => {
                               e.stopPropagation();
                               if (activeSection !== 'participants') {
                                 setActiveSection('participants');
@@ -450,22 +455,22 @@ Agora é só escolher o presente perfeito! 🎉`}
 
               <div className="submit-section">
                 <div className="submit-info">
-                  {getValidParticipantsCount() >= 2 && (
+                  {validParticipantsCount >= 2 && (
                     <div className="ready-indicator">
                       <span className="ready-icon">✓</span>
                       <span>Pronto para sortear!</span>
                     </div>
                   )}
-                  {getValidParticipantsCount() < 2 && (
+                  {validParticipantsCount < 2 && (
                     <div className="not-ready-indicator">
-                      <span>Adicione {2 - getValidParticipantsCount()} {2 - getValidParticipantsCount() === 1 ? 'participante' : 'participantes'} para continuar</span>
+                      <span>Adicione {2 - validParticipantsCount} {2 - validParticipantsCount === 1 ? 'participante' : 'participantes'} para continuar</span>
                     </div>
                   )}
                 </div>
                 <button 
                   type="submit" 
-                  disabled={loading || getValidParticipantsCount() < 2 || hasDuplicateEmails()} 
-                  className={`btn-submit ${getValidParticipantsCount() >= 2 && !hasDuplicateEmails() ? 'ready' : ''}`}
+                  disabled={loading || validParticipantsCount < 2 || hasDuplicateEmails} 
+                  className={`btn-submit ${validParticipantsCount >= 2 && !hasDuplicateEmails ? 'ready' : ''}`}
                 >
                   {loading ? (
                     <>

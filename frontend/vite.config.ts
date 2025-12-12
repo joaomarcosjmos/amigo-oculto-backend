@@ -13,5 +13,28 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    target: 'es2015',
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true,
+      },
+    },
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom'],
+          'axios-vendor': ['axios'],
+        },
+      },
+    },
+    reportCompressedSize: true,
+    chunkSizeWarningLimit: 1000,
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'axios'],
+  },
 });
 
