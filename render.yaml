@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: amigo-oculto-backend
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      # Configure estas variáveis no painel do Render:
+      # SMTP_HOST=smtp.gmail.com
+      # SMTP_PORT=587
+      # SMTP_USER=amigo.oculto.inimigo.pt@gmail.com
+      # SMTP_PASS=cmpi kbxp chyh lbfe
+      # SMTP_FROM=amigo.oculto.inimigo.pt@gmail.com
+      # SMTP_FROM_NAME=Amigo Oculto
+
+  - type: web
+    name: amigo-oculto-frontend
+    env: static
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: frontend/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
