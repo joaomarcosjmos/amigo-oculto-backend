@@ -270,7 +270,6 @@
   border-radius: 16px;
   padding: 30px;
   transition: all 0.3s;
-  cursor: pointer;
 }
 
 .form-section:hover {

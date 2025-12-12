@@ -205,8 +205,8 @@ Boa sorte e divirta-se!`);
 
             <form onSubmit={handleSubmit} className="form">
             {/* Configurações */}
-            <div className="form-section" onClick={() => setActiveSection('config')}>
-              <div className="section-title">
+            <div className="form-section">
+              <div className="section-title" onClick={() => setActiveSection('config')} style={{ cursor: 'pointer' }}>
                 <span className="section-icon">⚙️</span>
                 <h2>Configurações</h2>
               </div>
@@ -223,6 +223,7 @@ Boa sorte e divirta-se!`);
                   type="email"
                   value={organizerEmail}
                   onChange={(e) => setOrganizerEmail(e.target.value)}
+                  onFocus={() => setActiveSection('config')}
                   placeholder="seu-email@exemplo.com"
                   className={organizerEmail && !organizerEmail.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/) ? 'input-error' : ''}
                 />
@@ -256,6 +257,7 @@ Boa sorte e divirta-se!`);
                   id="emailTemplate"
                   value={emailTemplate}
                   onChange={(e) => setEmailTemplate(e.target.value)}
+                  onFocus={() => setActiveSection('config')}
                   placeholder={`Olá!
 
 O sorteio do **Amigo Oculto** foi realizado!
@@ -281,8 +283,8 @@ Agora é só escolher o presente perfeito! 🎉`}
             </div>
 
             {/* Participantes */}
-            <div className="form-section" onClick={() => setActiveSection('participants')}>
-              <div className="section-title">
+            <div className="form-section">
+              <div className="section-title" onClick={() => setActiveSection('participants')} style={{ cursor: 'pointer' }}>
                 <span className="section-icon">👥</span>
                 <h2>Participantes</h2>
                 <div className="participant-count">
@@ -344,6 +346,7 @@ Agora é só escolher o presente perfeito! 🎉`}
                             onChange={(e) =>
                               updateParticipant(index, 'nickname', e.target.value)
                             }
+                            onFocus={() => setActiveSection('participants')}
                             placeholder="Ex: João Grandão"
                             required
                             className={participant.nickname && !participant.nickname.trim() ? 'input-error' : ''}
@@ -362,6 +365,7 @@ Agora é só escolher o presente perfeito! 🎉`}
                             onChange={(e) =>
                               updateParticipant(index, 'email', e.target.value)
                             }
+                            onFocus={() => setActiveSection('participants')}
                             placeholder="email@exemplo.com"
                             required
                             className={participant.email && !emailValid ? 'input-error' : ''}
@@ -384,6 +388,7 @@ Agora é só escolher o presente perfeito! 🎉`}
                             onChange={(e) =>
                               updateParticipant(index, 'partnerEmail', e.target.value)
                             }
+                            onFocus={() => setActiveSection('participants')}
                             placeholder="parceiro@exemplo.com"
                           />
                         </div>
