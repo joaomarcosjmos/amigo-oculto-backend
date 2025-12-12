@@ -19,16 +19,21 @@ O sistema agora suporta **Resend** como provedor de email principal, com fallbac
 3. Vá em **API Keys** e crie uma nova chave
 4. Copie a chave API (começa com `re_`)
 
-### 2. Configurar domínio (Opcional mas recomendado)
+### 2. Configurar domínio (OBRIGATÓRIO para produção)
 
-Para usar um email personalizado (ex: `noreply@seudominio.com`):
+⚠️ **IMPORTANTE:** O domínio de teste (`onboarding@resend.dev`) só permite enviar emails para o próprio endereço cadastrado na conta do Resend.
+
+**Para enviar para qualquer destinatário, você DEVE verificar um domínio:**
 
 1. Vá em **Domains** no Resend
-2. Adicione seu domínio
-3. Configure os registros DNS conforme instruções
-4. Aguarde a verificação (pode levar alguns minutos)
+2. Clique em **Add Domain**
+3. Digite seu domínio (ex: `seudominio.com`)
+4. Configure os registros DNS conforme instruções:
+   - Adicione os registros SPF, DKIM e DMARC no seu provedor DNS
+5. Aguarde a verificação (pode levar alguns minutos)
+6. Após verificado, use um email do seu domínio (ex: `noreply@seudominio.com`)
 
-**Nota:** Você pode usar o domínio padrão do Resend (`onboarding@resend.dev`) para testes, mas é limitado.
+**Alternativa temporária:** Se não tiver um domínio, o sistema fará fallback automático para SMTP quando detectar que o domínio não está verificado.
 
 ### 3. Configurar variáveis de ambiente no Render
 
@@ -69,9 +74,15 @@ Após configurar, faça um teste de sorteio. Os logs mostrarão:
 - Verifique se a chave API está correta
 - Certifique-se de que copiou a chave completa (começa com `re_`)
 
-### Erro: "Domain not verified"
-- Use `onboarding@resend.dev` para testes
-- Ou configure seu domínio no Resend
+### Erro: "You can only send testing emails to your own email address"
+- **Causa:** Você está usando o domínio de teste (`onboarding@resend.dev`)
+- **Solução:** Verifique um domínio no Resend (veja seção 2 acima)
+- **Fallback:** O sistema tentará usar SMTP automaticamente se o domínio não estiver verificado
+
+### Erro: "Too many requests" / Rate limit
+- O Resend tem limite de 2 requisições por segundo no plano gratuito
+- O sistema já implementa delay automático de 600ms entre envios
+- Se persistir, aumente o delay no código ou aguarde alguns segundos
 
 ### Ainda usando SMTP?
 - Verifique se `RESEND_API_KEY` está configurado corretamente

@@ -141,11 +141,17 @@ export class SecretSantaService {
       try {
         await this.emailService.sendSecretSantaEmail(email, secretFriendNickname, emailTemplate);
         emailResults.push({ email, success: true });
+        
+        // Delay de 600ms entre envios para respeitar rate limit do Resend (2 req/s)
+        // Isso garante que não excedemos o limite mesmo com retries
+        await new Promise((resolve) => setTimeout(resolve, 600));
       } catch (error: any) {
         const errorMessage = error?.message || 'Erro desconhecido';
         this.logger.error(`Erro ao enviar email para ${email}: ${errorMessage}`);
         emailResults.push({ email, success: false, error: errorMessage });
         // Continua tentando enviar para os outros participantes
+        // Delay mesmo em caso de erro para não sobrecarregar
+        await new Promise((resolve) => setTimeout(resolve, 600));
       }
     }
 

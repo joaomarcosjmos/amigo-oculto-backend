@@ -131,6 +131,13 @@ export class EmailService implements OnModuleInit {
         });
 
         if (error) {
+          // Se for erro de domínio não verificado, tenta fallback para SMTP
+          if (error.message?.includes('only send testing emails to your own email address')) {
+            this.logger.warn(
+              `[Resend] Domínio não verificado. Tentando fallback para SMTP...`,
+            );
+            throw new Error('RESEND_DOMAIN_NOT_VERIFIED');
+          }
           throw new Error(error.message || 'Erro ao enviar email via Resend');
         }
 
@@ -139,6 +146,19 @@ export class EmailService implements OnModuleInit {
       } catch (error: any) {
         lastError = error;
         const errorMessage = error.message || 'Erro desconhecido';
+        
+        // Se for erro de rate limit, aumenta o delay
+        if (errorMessage.includes('Too many requests') || errorMessage.includes('rate limit')) {
+          const delay = attempt * 3000; // Delay maior para rate limit: 3s, 6s, 9s
+          this.logger.warn(
+            `[Resend] Rate limit atingido. Aguardando ${delay}ms antes da próxima tentativa...`,
+          );
+          if (attempt < maxRetries) {
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            continue;
+          }
+        }
+        
         this.logger.warn(
           `[Resend] Tentativa ${attempt}/${maxRetries} falhou para ${email}: ${errorMessage}`,
         );
@@ -148,6 +168,16 @@ export class EmailService implements OnModuleInit {
           this.logger.log(`Aguardando ${delay}ms antes da próxima tentativa...`);
           await new Promise((resolve) => setTimeout(resolve, delay));
         }
+      }
+    }
+
+    // Se foi erro de domínio não verificado, tenta SMTP como fallback
+    if (lastError?.message === 'RESEND_DOMAIN_NOT_VERIFIED') {
+      this.logger.warn(
+        `[Resend] Domínio não verificado. Tentando enviar via SMTP como fallback...`,
+      );
+      if (this.transporter) {
+        return this.sendWithSMTP(email, secretFriendNickname, customTemplate);
       }
     }
 
